@@ -73,7 +73,7 @@ void CommunicationService::update()
 bool CommunicationService::enqueue(
     const ReceivedPacket& packet)
 {
-    if (count >= COMM_QUEUE_SIZE)
+    if (count >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
     {
         Logger::warning("Communication queue full");
 
@@ -84,7 +84,7 @@ bool CommunicationService::enqueue(
 
     tail++;
 
-    if (tail >= COMM_QUEUE_SIZE)
+    if (tail >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
         tail = 0;
 
     count++;
@@ -102,7 +102,7 @@ bool CommunicationService::dequeue(
 
     head++;
 
-    if (head >= COMM_QUEUE_SIZE)
+    if (head >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
         head = 0;
 
     count--;
