@@ -23,6 +23,12 @@ constexpr uint32_t SERVO_RETRACT_DELAY_MS = 3000;
 constexpr uint32_t SESSION_STOP_DELAY_MS = 5000;
 
 //========================
+// Event Bus
+//========================
+
+constexpr uint8_t MAX_EVENT_SUBSCRIBERS = 8;
+
+//========================
 // Suction
 //========================
 
