@@ -1,0 +1,22 @@
+enum class SystemEvent : uint8_t
+{
+    RFID_DETECTED,
+
+    COW_VALIDATED,
+
+    PUMP_STARTED,
+
+    PUMP_STOPPED,
+
+    MILKING_STARTED,
+
+    MILKING_FINISHED,
+
+    SD_WRITE_COMPLETED,
+
+    ESPNOW_PACKET_RECEIVED,
+
+    ESPNOW_PACKET_SENT,
+
+    ERROR_OCCURRED
+};
