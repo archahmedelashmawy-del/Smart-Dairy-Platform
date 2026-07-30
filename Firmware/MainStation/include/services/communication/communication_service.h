@@ -5,6 +5,16 @@
 #include "core/error_codes.h"
 #include "config/packet.h"
 #include "drivers/communication/espnow_driver.h"
+#include "core/event_bus.h"
+
+// Metadata للحزمة المستقبلة لتتبع جودة الاتصال والمصدر
+struct ReceivedPacket
+{
+    SystemPacket packet;
+    uint8_t senderMac[6];
+    int8_t rssi;
+    uint32_t receivedAt;
+};
 
 class CommunicationService
 {
@@ -20,16 +30,18 @@ public:
     size_t getDroppedPackets() const;
 
 private:
-    bool enqueue(const SystemPacket& packet);
-    bool dequeue(SystemPacket& packet);
-    void processIncomingPacket(const SystemPacket& packet);
+    bool enqueue(const ReceivedPacket& rxPacket);
+    bool dequeue(ReceivedPacket& rxPacket);
+    
+    void processIncomingPacket(const ReceivedPacket& rxPacket);
+    void publishEvent(EventType type, const SystemPacket& packet);
 
 private:
     ESPNowDriver& driver;
     bool initialized;
 
     static constexpr size_t RX_QUEUE_SIZE = 16;
-    SystemPacket rxQueue[RX_QUEUE_SIZE];
+    ReceivedPacket rxQueue[RX_QUEUE_SIZE];
 
     size_t head;
     size_t tail;
