@@ -1,6 +1,5 @@
 #include "services/communication/communication_service.h"
 #include "core/logger.h"
-#include "core/event_bus.h"
 
 /*----------------------------------------------------------
     Constructor
@@ -32,8 +31,15 @@ ErrorCode CommunicationService::begin()
     if (err != ErrorCode::OK)
         return err;
 
+    // تسجيل Callback الاستقبال وتضمين بيانات الـ Metadata
     driver.registerReceiveCallback([this](const SystemPacket& packet) {
-        enqueue(packet);
+        ReceivedPacket rxPacket;
+        rxPacket.packet = packet;
+        rxPacket.receivedAt = millis();
+        rxPacket.rssi = 0; // يتم تحديثه لاحقاً إن أتيح من الـ Driver
+        memset(rxPacket.senderMac, 0, sizeof(rxPacket.senderMac));
+
+        enqueue(rxPacket);
     });
 
     initialized = true;
@@ -46,7 +52,7 @@ ErrorCode CommunicationService::begin()
     Queue Management
 ----------------------------------------------------------*/
 
-bool CommunicationService::enqueue(const SystemPacket& packet)
+bool CommunicationService::enqueue(const ReceivedPacket& rxPacket)
 {
     if (count >= RX_QUEUE_SIZE)
     {
@@ -55,19 +61,19 @@ bool CommunicationService::enqueue(const SystemPacket& packet)
         return false;
     }
 
-    rxQueue[tail] = packet;
+    rxQueue[tail] = rxPacket;
     tail = (tail + 1) % RX_QUEUE_SIZE;
     count++;
 
     return true;
 }
 
-bool CommunicationService::dequeue(SystemPacket& packet)
+bool CommunicationService::dequeue(ReceivedPacket& rxPacket)
 {
     if (count == 0)
         return false;
 
-    packet = rxQueue[head];
+    rxPacket = rxQueue[head];
     head = (head + 1) % RX_QUEUE_SIZE;
     count--;
 
@@ -92,6 +98,20 @@ size_t CommunicationService::getDroppedPackets() const
 }
 
 /*----------------------------------------------------------
+    Event Publishing Wrapper
+----------------------------------------------------------*/
+
+void CommunicationService::publishEvent(EventType type, const SystemPacket& packet)
+{
+    Event event;
+    event.type = type;
+    event.timestamp = millis();
+    event.packet = packet;
+
+    EventBus::publish(event);
+}
+
+/*----------------------------------------------------------
     Update Loop
 ----------------------------------------------------------*/
 
@@ -100,10 +120,10 @@ void CommunicationService::update()
     if (!initialized)
         return;
 
-    SystemPacket packet;
+    ReceivedPacket rxPacket;
 
-    while (dequeue(packet))
+    while (dequeue(rxPacket))
     {
-        processIncomingPacket(packet);
+        processIncomingPacket(rxPacket);
     }
 }
