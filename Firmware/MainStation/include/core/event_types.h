@@ -1,28 +1,107 @@
+#ifndef EVENT_TYPES_H
+#define EVENT_TYPES_H
+
+#include <stdint.h>
+
+/*
+==========================================================
+ Smart Dairy Platform
+ Event Type Definitions
+----------------------------------------------------------
+ Central list of every event that may circulate
+ through the EventBus.
+==========================================================
+*/
+
 enum class EventType : uint16_t
 {
     None = 0,
 
-    // Communication
+    /*--------------------------------------------------
+        System Events
+    --------------------------------------------------*/
+    SystemStartup,
+    SystemShutdown,
+    SystemReset,
+    SystemHeartbeat,
+
+    /*--------------------------------------------------
+        Communication
+    --------------------------------------------------*/
     PacketReceived,
     PacketSent,
     PacketDropped,
-    InvalidPacket,
+    PacketValidationFailed,
+    PeerConnected,
+    PeerDisconnected,
 
-    // RFID
-    RFIDDetected,
+    /*--------------------------------------------------
+        RFID
+    --------------------------------------------------*/
+    RFIDCardDetected,
+    RFIDReadFailed,
 
-    // Milking
+    /*--------------------------------------------------
+        User Input
+    --------------------------------------------------*/
+    KeyPressed,
+
+    /*--------------------------------------------------
+        Milking Process
+    --------------------------------------------------*/
+    MilkingRequested,
     MilkingStarted,
-    MilkingStopped,
+    MilkingRunning,
+    MilkingPaused,
+    MilkingFinished,
+    MilkingCancelled,
 
-    // Veterinary
-    VetEventReceived,
+    /*--------------------------------------------------
+        Pump
+    --------------------------------------------------*/
+    PumpStartRequested,
+    PumpStarted,
+    PumpStopped,
 
-    // Storage
+    /*--------------------------------------------------
+        Servo
+    --------------------------------------------------*/
+    ServoOpened,
+    ServoClosed,
+
+    /*--------------------------------------------------
+        Sensors
+    --------------------------------------------------*/
+    TemperatureUpdated,
+    SuctionUpdated,
+    FlowUpdated,
+
+    /*--------------------------------------------------
+        Storage
+    --------------------------------------------------*/
     SDMounted,
-    SDWriteFailed,
+    SDRemoved,
+    DataSaved,
+    ExportCompleted,
 
-    // System
-    Error,
-    Warning
+    /*--------------------------------------------------
+        RTC
+    --------------------------------------------------*/
+    TimeUpdated,
+
+    /*--------------------------------------------------
+        Diagnostics
+    --------------------------------------------------*/
+    WarningRaised,
+    ErrorRaised,
+
+    /*--------------------------------------------------
+        Future Expansion
+    --------------------------------------------------*/
+    DatabaseSync,
+    CloudSync,
+    OTAStarted,
+    OTAFinished
 };
+
+#endif
