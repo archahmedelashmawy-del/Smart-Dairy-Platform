@@ -2,51 +2,77 @@
 #define COMMUNICATION_SERVICE_H
 
 #include <Arduino.h>
+
 #include "core/error_codes.h"
-#include "config/packet.h"
-#include "drivers/communication/espnow_driver.h"
+#include "core/event.h"
 #include "core/event_bus.h"
 
-// Metadata للحزمة المستقبلة لتتبع جودة الاتصال والمصدر
+#include "config/packet.h"
+
+#include "drivers/communication/espnow_driver.h"
+
+constexpr size_t COMM_QUEUE_SIZE = 16;
+
 struct ReceivedPacket
 {
-    SystemPacket packet;
+    ESPNowPacket packet;
+
     uint8_t senderMac[6];
+
     int8_t rssi;
-    uint32_t receivedAt;
+
+    uint32_t timestamp;
 };
 
 class CommunicationService
 {
 public:
+
     explicit CommunicationService(ESPNowDriver& driver);
-    ~CommunicationService() = default;
 
     ErrorCode begin();
+
     void update();
 
+    ErrorCode sendPacket(
+        const ESPNowPacket& packet,
+        const uint8_t* peer);
+
+    ErrorCode broadcast(
+        const ESPNowPacket& packet);
+
+    bool hasConnection() const;
+
+private:
+
+    bool enqueue(const ReceivedPacket& packet);
+
+    bool dequeue(ReceivedPacket& packet);
+
     void clearQueue();
+
     size_t pendingPackets() const;
-    size_t getDroppedPackets() const;
+
+    void processIncomingPacket(
+        const ReceivedPacket& packet);
+
+    void publishCommunicationEvent(
+        EventType type,
+        const ReceivedPacket& packet);
 
 private:
-    bool enqueue(const ReceivedPacket& rxPacket);
-    bool dequeue(ReceivedPacket& rxPacket);
-    
-    void processIncomingPacket(const ReceivedPacket& rxPacket);
-    void publishEvent(EventType type, const SystemPacket& packet);
 
-private:
     ESPNowDriver& driver;
-    bool initialized;
 
-    static constexpr size_t RX_QUEUE_SIZE = 16;
-    ReceivedPacket rxQueue[RX_QUEUE_SIZE];
+    ReceivedPacket queue[COMM_QUEUE_SIZE];
 
     size_t head;
+
     size_t tail;
+
     size_t count;
-    size_t droppedPackets;
+
+    bool initialized;
 };
 
 #endif
