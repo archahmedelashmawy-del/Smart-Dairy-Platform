@@ -7,11 +7,10 @@
 #include "core/event.h"
 #include "core/event_bus.h"
 
+#include "config/constants.h"
 #include "config/packet.h"
 
 #include "drivers/communication/espnow_driver.h"
-
-constexpr size_t COMM_QUEUE_SIZE = 16;
 
 struct ReceivedPacket
 {
@@ -30,28 +29,28 @@ public:
 
     explicit CommunicationService(ESPNowDriver& driver);
 
-    ErrorCode begin();
+    [[nodiscard]] ErrorCode begin();
 
     void update();
 
-    ErrorCode sendPacket(
+    [[nodiscard]] ErrorCode sendPacket(
         const ESPNowPacket& packet,
         const uint8_t* peer);
 
-    ErrorCode broadcast(
+    [[nodiscard]] ErrorCode broadcast(
         const ESPNowPacket& packet);
 
-    bool hasConnection() const;
+    [[nodiscard]] bool hasConnection() const;
 
 private:
 
-    bool enqueue(const ReceivedPacket& packet);
+    [[nodiscard]] bool enqueue(const ReceivedPacket& packet);
 
-    bool dequeue(ReceivedPacket& packet);
+    [[nodiscard]] bool dequeue(ReceivedPacket& packet);
 
     void clearQueue();
 
-    size_t pendingPackets() const;
+    [[nodiscard]] size_t pendingPackets() const;
 
     void processIncomingPacket(
         const ReceivedPacket& packet);
@@ -64,7 +63,7 @@ private:
 
     ESPNowDriver& driver;
 
-    ReceivedPacket queue[COMM_QUEUE_SIZE];
+    ReceivedPacket queue[SystemConstants::COMMUNICATION_QUEUE_SIZE];
 
     size_t head;
 
