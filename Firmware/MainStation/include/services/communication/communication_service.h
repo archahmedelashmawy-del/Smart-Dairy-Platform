@@ -34,6 +34,8 @@ public:
 
 private:
 
+    static void onDataReceived(const ReceivedPacket& rxPacket);
+
     [[nodiscard]] bool enqueue(const CommunicationEvent& event);
 
     [[nodiscard]] bool dequeue(CommunicationEvent& event);
@@ -50,6 +52,8 @@ private:
         const CommunicationEvent& event);
 
 private:
+
+    static CommunicationService* instance;
 
     ESPNowDriver& driver;
 
