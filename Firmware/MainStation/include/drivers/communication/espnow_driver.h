@@ -8,12 +8,30 @@
 #include "core/error_codes.h"
 #include "config/packet.h"
 
+/*
+==========================================================
+ Smart Dairy Platform
+ Decoupled Container Structure (SDP-ENG-0022)
+ Allows upper layers to consume packets without ESP-NOW API dependency
+==========================================================
+*/
+struct ReceivedPacket
+{
+    SmartPacket packet;
+
+    uint8_t senderMAC[6];
+
+    int8_t rssi;
+
+    uint32_t receivedAt;
+};
+
 class ESPNowDriver
 {
 public:
 
     using ReceiveCallback =
-        void (*)(const CommunicationPacket&);
+        void (*)(const ReceivedPacket&);
 
     using SendCallback =
         void (*)(const uint8_t* mac,
@@ -33,10 +51,10 @@ public:
 
     ErrorCode sendPacket(
             const uint8_t* mac,
-            const CommunicationPacket& packet);
+            const SmartPacket& packet);
 
     ErrorCode broadcast(
-            const CommunicationPacket& packet);
+            const SmartPacket& packet);
 
     void registerReceiveCallback(
             ReceiveCallback callback);
@@ -58,7 +76,7 @@ private:
         esp_now_send_status_t status);
 
     static bool validatePacket(
-        const CommunicationPacket& packet,
+        const SmartPacket& packet,
         int len);
 
 private:
