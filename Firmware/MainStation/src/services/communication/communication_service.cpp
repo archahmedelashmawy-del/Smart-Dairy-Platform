@@ -86,8 +86,8 @@ void CommunicationService::end()
     if (!initialized)
         return;
 
+    // Unregister only callbacks owned by CommunicationService
     driver.registerReceiveCallback(nullptr);
-    driver.registerSendCallback(nullptr);
 
     clearQueue();
     overflows = 0;
