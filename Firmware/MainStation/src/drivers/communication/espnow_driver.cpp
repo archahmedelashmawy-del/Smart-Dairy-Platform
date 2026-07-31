@@ -2,23 +2,29 @@
 
 #include <WiFi.h>
 #include <esp_now.h>
-#include <cassert>
+#include "core/logger.h"
 
 //====================================================
-// Static Member Initialization
+// Static Member Initialization (Blocking 2 - Fixed)
 //====================================================
 
 ESPNowDriver* ESPNowDriver::instance = nullptr;
+ESPNowDriver::ReceiveCallback ESPNowDriver::receiveCallback = nullptr;
+ESPNowDriver::SendCallback ESPNowDriver::sendCallback = nullptr;
 
 //====================================================
-// Constructor (Singleton Guard - Blocking 1)
+// Constructor (Runtime Guard - Blocking 1)
 //====================================================
 
 ESPNowDriver::ESPNowDriver()
-    : initialized(false), peers(0), receiveCallback(nullptr), sendCallback(nullptr)
+    : initialized(false), peers(0)
 {
-    // Ensure single instance per hardware interface (Singleton by design)
-    assert(instance == nullptr && "ESPNowDriver instance already exists!");
+    // Explicit Guard against multiple instantiation on ESP32
+    if (instance != nullptr)
+    {
+        Logger::error("ESPNowDriver already instantiated! Single instance required.");
+        abort();
+    }
 
     memset(&statistics, 0, sizeof(statistics));
     instance = this;
@@ -102,7 +108,7 @@ void ESPNowDriver::handleReceive(
 }
 
 //====================================================
-// Packet Validation (Blocking 4 & Header Checks)
+// Packet Validation (Enhanced Bounds Check - Item 3)
 //====================================================
 
 ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
@@ -110,6 +116,12 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
     if (len != sizeof(SmartPacket))
     {
         return ErrorCode::INVALID_PACKET_SIZE;
+    }
+
+    // Bounds Check: Prevent unexpected payload lengths (Enhancement 3)
+    if (packet.header.payloadLength > sizeof(SmartPacket))
+    {
+        return ErrorCode::INVALID_PAYLOAD_SIZE;
     }
 
     // 1. Validate Header Protocol Version
@@ -130,7 +142,7 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
             return ErrorCode::INVALID_DEVICE_TYPE;
     }
 
-    // 3. Validate Packet Identity & Session IDs (Blocking 4)
+    // 3. Validate Packet Identity & Session IDs
     if (packet.header.packetID == 0)
     {
         return ErrorCode::INVALID_PACKET_ID;
