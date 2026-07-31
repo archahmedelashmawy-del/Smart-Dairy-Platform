@@ -14,7 +14,7 @@ ESPNowDriver* ESPNowDriver::instance = nullptr;
 //====================================================
 
 ESPNowDriver::ESPNowDriver()
-    : initialized(false)
+    : initialized(false), peers(0)
 {
     memset(&statistics, 0, sizeof(statistics));
     instance = this;
@@ -47,13 +47,13 @@ void ESPNowDriver::handleReceive(
     statistics.packetsReceived++;
 
     // 1. Basic Validation
-    if (data == nullptr)
+    if (data == nullptr || info == nullptr)
     {
         statistics.packetsDropped++;
         return;
     }
 
-    if (len != sizeof(ESPNowPacket))
+    if (len != sizeof(SmartPacket))
     {
         statistics.invalidPackets++;
         statistics.packetsDropped++;
@@ -61,11 +61,11 @@ void ESPNowDriver::handleReceive(
     }
 
     // 2. Copy Packet
-    ESPNowPacket packet;
+    SmartPacket packet;
     memcpy(&packet, data, sizeof(packet));
 
     // 3. Validate Packet
-    ErrorCode result = validatePacket(packet);
+    ErrorCode result = validatePacket(packet, len);
 
     if (result != ErrorCode::OK)
     {
@@ -74,10 +74,16 @@ void ESPNowDriver::handleReceive(
         return;
     }
 
-    // 4. Forward to Upper Layer
+    // 4. Forward to Upper Layer via ReceivedPacket Container
     if (receiveCallback != nullptr)
     {
-        receiveCallback(packet);
+        ReceivedPacket rxContainer;
+        rxContainer.packet = packet;
+        memcpy(rxContainer.senderMAC, info->src_addr, 6);
+        rxContainer.rssi = info->rx_ctrl->rssi;
+        rxContainer.receivedAt = millis();
+
+        receiveCallback(rxContainer);
     }
 }
 
@@ -85,34 +91,27 @@ void ESPNowDriver::handleReceive(
 // Packet Validation
 //====================================================
 
-ErrorCode ESPNowDriver::validatePacket(const ESPNowPacket& packet)
+ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
 {
-    // Protocol Version
-    if (packet.protocolVersion != PROTOCOL_VERSION)
+    if (len != sizeof(SmartPacket))
+    {
+        return ErrorCode::INVALID_PACKET_SIZE;
+    }
+
+    // Validate Header Protocol Version
+    if (packet.header.protocolVersion == 0)
     {
         return ErrorCode::INVALID_PROTOCOL_VERSION;
     }
 
-    // Packet Type
-    if (packet.packetType >= PacketType::COUNT)
+    // Validate Packet Type range
+    if (packet.header.type == static_cast<PacketType>(0))
     {
         return ErrorCode::INVALID_PACKET_TYPE;
     }
 
-    // Cow ID (Safe strnlen check)
-    if (strnlen(packet.cowID, sizeof(packet.cowID)) == 0)
-    {
-        return ErrorCode::INVALID_COW_ID;
-    }
-
-    // Device ID
-    if (packet.deviceID == 0)
-    {
-        return ErrorCode::INVALID_DEVICE_ID;
-    }
-
-    // Timestamp
-    if (packet.timestamp == 0)
+    // Validate Timestamp
+    if (packet.header.timestamp == 0)
     {
         return ErrorCode::INVALID_TIMESTAMP;
     }
@@ -152,9 +151,14 @@ bool ESPNowDriver::isInitialized() const
 // Callback Registration
 //====================================================
 
-void ESPNowDriver::registerReceiveCallback(PacketCallback callback)
+void ESPNowDriver::registerReceiveCallback(ReceiveCallback callback)
 {
     receiveCallback = callback;
+}
+
+void ESPNowDriver::registerSendCallback(SendCallback callback)
+{
+    sendCallback = callback;
 }
 
 //====================================================
@@ -183,6 +187,7 @@ ErrorCode ESPNowDriver::addPeer(const uint8_t* mac)
         return ErrorCode::PEER_ADD_FAILED;
     }
 
+    peers++;
     return ErrorCode::OK;
 }
 
@@ -203,14 +208,20 @@ ErrorCode ESPNowDriver::removePeer(const uint8_t* mac)
         return ErrorCode::PEER_REMOVE_FAILED;
     }
 
+    if (peers > 0) peers--;
     return ErrorCode::OK;
+}
+
+uint8_t ESPNowDriver::peerCount() const
+{
+    return peers;
 }
 
 //====================================================
 // Send / Broadcast API
 //====================================================
 
-ErrorCode ESPNowDriver::send(const uint8_t* mac, const ESPNowPacket& packet)
+ErrorCode ESPNowDriver::sendPacket(const uint8_t* mac, const SmartPacket& packet)
 {
     if (!initialized)
         return ErrorCode::ESPNOW_NOT_INITIALIZED;
@@ -218,7 +229,7 @@ ErrorCode ESPNowDriver::send(const uint8_t* mac, const ESPNowPacket& packet)
     if (mac == nullptr)
         return ErrorCode::INVALID_MAC_ADDRESS;
 
-    ErrorCode validation = validatePacket(packet);
+    ErrorCode validation = validatePacket(packet, sizeof(packet));
 
     if (validation != ErrorCode::OK)
     {
@@ -243,13 +254,13 @@ ErrorCode ESPNowDriver::send(const uint8_t* mac, const ESPNowPacket& packet)
     return ErrorCode::OK;
 }
 
-ErrorCode ESPNowDriver::broadcast(const ESPNowPacket& packet)
+ErrorCode ESPNowDriver::broadcast(const SmartPacket& packet)
 {
     static constexpr uint8_t BROADCAST_MAC[ESP_NOW_ETH_ALEN] = {
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
     };
 
-    return send(BROADCAST_MAC, packet);
+    return sendPacket(BROADCAST_MAC, packet);
 }
 
 //====================================================
