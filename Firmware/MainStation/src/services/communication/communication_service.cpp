@@ -90,6 +90,7 @@ void CommunicationService::end()
     driver.registerSendCallback(nullptr);
 
     clearQueue();
+    overflows = 0;
     initialized = false;
 
     Logger::info("CommunicationService stopped and callbacks cleared.");
@@ -147,10 +148,16 @@ uint32_t CommunicationService::queueOverflowCount() const
 
 void CommunicationService::printDiagnostics(Stream& stream) const
 {
-    stream.println("--- Communication Service Diagnostics ---");
-    stream.printf("Initialized: %s\n", initialized ? "YES" : "NO");
-    stream.printf("Pending Queue Packets: %zu\n", count);
-    stream.printf("Queue Overflow Count: %u\n", overflows);
+    stream.println(F("--- Communication Service Diagnostics ---"));
+    stream.print(F("Initialized: "));
+    stream.println(initialized ? F("YES") : F("NO"));
+    
+    stream.print(F("Pending Queue Packets: "));
+    stream.println(count);
+    
+    stream.print(F("Queue Overflow Count: "));
+    stream.println(overflows);
+    
     driver.printStatistics(stream);
 }
 
@@ -225,6 +232,11 @@ void CommunicationService::publishCommunicationEvent(
 
     sysEvent.source = EventSource::Communication;
 
+    // CRITICAL MEMORY SAFETY NOTE:
+    // Zero-copy synchronous dispatch.
+    // payload points to a stack object during dispatch.
+    // EventBus subscribers MUST consume it immediately synchronously.
+    // Do NOT retain this pointer for deferred processing.
     sysEvent.payload = &event;
 
     sysEvent.payloadSize = sizeof(CommunicationEvent);
