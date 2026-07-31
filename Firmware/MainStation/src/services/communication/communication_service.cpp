@@ -8,6 +8,23 @@ namespace
 }
 
 /*----------------------------------------------------------
+    Static Bridge Handler (Blocking 4 Solution)
+----------------------------------------------------------*/
+
+void CommunicationService::onDataReceived(const ReceivedPacket& rxPacket)
+{
+    if (instance == nullptr)
+        return;
+
+    CommunicationEvent commEvent;
+    commEvent.packet = rxPacket;
+    instance->enqueue(commEvent);
+}
+
+// Static Instance Initialization
+CommunicationService* CommunicationService::instance = nullptr;
+
+/*----------------------------------------------------------
     Constructor
 ----------------------------------------------------------*/
 
@@ -20,6 +37,7 @@ CommunicationService::CommunicationService(
     count(0),
     initialized(false)
 {
+    instance = this;
 }
 
 /*----------------------------------------------------------
@@ -36,13 +54,8 @@ ErrorCode CommunicationService::begin()
     if (err != ErrorCode::OK)
         return err;
 
-    driver.registerReceiveCallback(
-        [this](const ReceivedPacket& rxPacket)
-        {
-            CommunicationEvent commEvent;
-            commEvent.packet = rxPacket;
-            enqueue(commEvent);
-        });
+    // Register static callback function pointer (Avoids Lambda-capturing issue)
+    driver.registerReceiveCallback(CommunicationService::onDataReceived);
 
     initialized = true;
 
@@ -97,7 +110,7 @@ bool CommunicationService::hasConnection() const
 }
 
 /*----------------------------------------------------------
-    Queue
+    Queue Management (Improvement 1 Applied)
 ----------------------------------------------------------*/
 
 bool CommunicationService::enqueue(
@@ -111,12 +124,7 @@ bool CommunicationService::enqueue(
     }
 
     queue[tail] = event;
-
-    tail++;
-
-    if (tail >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
-        tail = 0;
-
+    tail = (tail + 1) % SystemConstants::COMMUNICATION_QUEUE_SIZE;
     count++;
 
     return true;
@@ -129,12 +137,7 @@ bool CommunicationService::dequeue(
         return false;
 
     event = queue[head];
-
-    head++;
-
-    if (head >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
-        head = 0;
-
+    head = (head + 1) % SystemConstants::COMMUNICATION_QUEUE_SIZE;
     count--;
 
     return true;
@@ -143,9 +146,7 @@ bool CommunicationService::dequeue(
 void CommunicationService::clearQueue()
 {
     head = 0;
-
     tail = 0;
-
     count = 0;
 }
 
@@ -167,7 +168,7 @@ void CommunicationService::processIncomingPacket(
 }
 
 /*----------------------------------------------------------
-    Event Publishing
+    Event Publishing (Blocking 3 Applied)
 ----------------------------------------------------------*/
 
 void CommunicationService::publishCommunicationEvent(
@@ -178,6 +179,7 @@ void CommunicationService::publishCommunicationEvent(
 
     sysEvent.type = type;
 
+    // Preserve local receive timestamp
     sysEvent.timestamp =
         (event.packet.receivedAt != INVALID_TIMESTAMP)
         ? event.packet.receivedAt
@@ -185,8 +187,10 @@ void CommunicationService::publishCommunicationEvent(
 
     sysEvent.source = EventSource::Communication;
 
-    // NOTE: payload pointer is valid only synchronously during publish().
-    // If EventBus switches to an asynchronous queue in the future, payload must be deep-copied.
+    // CRITICAL MEMORY SAFETY NOTE (Blocking 3):
+    // payload points to a stack object.
+    // EventBus subscribers MUST consume it immediately synchronously.
+    // Do NOT store this pointer for asynchronous processing.
     sysEvent.payload = &event;
 
     sysEvent.payloadSize = sizeof(CommunicationEvent);
