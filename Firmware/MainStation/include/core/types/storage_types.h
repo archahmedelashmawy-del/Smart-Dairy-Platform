@@ -27,7 +27,8 @@ enum class FileMode : uint8_t
 {
     Read = 0,
     Write,      // Overwrites existing
-    Append      // Appends to end
+    Append,     // Appends to end
+    ReadWrite   // Read and write access
 };
 
 /*
@@ -39,9 +40,11 @@ struct StorageInfo
 {
     StorageBackend backend;
     bool isMounted;
+    bool readOnly;
     uint64_t totalBytes;
     uint64_t usedBytes;
     uint64_t freeBytes;
+    uint32_t fileCount;
 };
 
 #endif
