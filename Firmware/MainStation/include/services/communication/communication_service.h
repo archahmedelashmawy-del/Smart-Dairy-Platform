@@ -19,6 +19,8 @@ public:
 
     explicit CommunicationService(ESPNowDriver& driver);
 
+    ~CommunicationService();
+
     [[nodiscard]] ErrorCode begin();
 
     void update();
@@ -31,6 +33,8 @@ public:
         const SmartPacket& packet);
 
     [[nodiscard]] bool hasConnection() const;
+
+    [[nodiscard]] uint32_t queueOverflowCount() const;
 
 private:
 
@@ -64,6 +68,8 @@ private:
     size_t tail;
 
     size_t count;
+
+    uint32_t overflows;
 
     bool initialized;
 };
