@@ -2,7 +2,7 @@
 #define EVENT_H
 
 #include <Arduino.h>
-#include <stdint.1h>
+#include <stdint.h>
 
 #include "core/event_types.h"
 
