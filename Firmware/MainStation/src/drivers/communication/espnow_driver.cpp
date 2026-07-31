@@ -2,6 +2,7 @@
 
 #include <WiFi.h>
 #include <esp_now.h>
+#include <cassert>
 
 //====================================================
 // Static Member Initialization
@@ -10,12 +11,15 @@
 ESPNowDriver* ESPNowDriver::instance = nullptr;
 
 //====================================================
-// Constructor
+// Constructor (Singleton Guard - Blocking 1)
 //====================================================
 
 ESPNowDriver::ESPNowDriver()
     : initialized(false), peers(0), receiveCallback(nullptr), sendCallback(nullptr)
 {
+    // Ensure single instance per hardware interface (Singleton by design)
+    assert(instance == nullptr && "ESPNowDriver instance already exists!");
+
     memset(&statistics, 0, sizeof(statistics));
     instance = this;
 }
@@ -98,7 +102,7 @@ void ESPNowDriver::handleReceive(
 }
 
 //====================================================
-// Packet Validation
+// Packet Validation (Blocking 4 & Header Checks)
 //====================================================
 
 ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
@@ -114,7 +118,7 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
         return ErrorCode::INVALID_PROTOCOL_VERSION;
     }
 
-    // 2. Validate Source Device Type (Blocking 5)
+    // 2. Validate Source Device Type
     switch (packet.header.source)
     {
         case DeviceType::MAIN_STATION:
@@ -126,7 +130,18 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
             return ErrorCode::INVALID_DEVICE_TYPE;
     }
 
-    // 3. Validate Packet Type and Payload Length Match (Blocking 1)
+    // 3. Validate Packet Identity & Session IDs (Blocking 4)
+    if (packet.header.packetID == 0)
+    {
+        return ErrorCode::INVALID_PACKET_ID;
+    }
+
+    if (packet.header.sessionID == 0)
+    {
+        return ErrorCode::INVALID_SESSION_ID;
+    }
+
+    // 4. Validate Packet Type and Payload Length Match
     switch (packet.header.type)
     {
         case PacketType::HEARTBEAT:
@@ -159,7 +174,7 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
             return ErrorCode::INVALID_PACKET_TYPE;
     }
 
-    // 4. Validate Timestamp (Send Time)
+    // 5. Validate Timestamp (Send Time)
     if (packet.header.timestamp == 0)
     {
         return ErrorCode::INVALID_TIMESTAMP;
