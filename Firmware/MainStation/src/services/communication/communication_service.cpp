@@ -37,9 +37,11 @@ ErrorCode CommunicationService::begin()
         return err;
 
     driver.registerReceiveCallback(
-        [this](const ReceivedPacket& packet)
+        [this](const ReceivedPacket& rxPacket)
         {
-            enqueue(packet);
+            CommunicationEvent commEvent;
+            commEvent.packet = rxPacket;
+            enqueue(commEvent);
         });
 
     initialized = true;
@@ -58,11 +60,11 @@ void CommunicationService::update()
     if (!initialized)
         return;
 
-    ReceivedPacket packet;
+    CommunicationEvent event;
 
-    while (dequeue(packet))
+    while (dequeue(event))
     {
-        processIncomingPacket(packet);
+        processIncomingPacket(event);
     }
 }
 
@@ -99,7 +101,7 @@ bool CommunicationService::hasConnection() const
 ----------------------------------------------------------*/
 
 bool CommunicationService::enqueue(
-    const ReceivedPacket& packet)
+    const CommunicationEvent& event)
 {
     if (count >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
     {
@@ -108,7 +110,7 @@ bool CommunicationService::enqueue(
         return false;
     }
 
-    queue[tail] = packet;
+    queue[tail] = event;
 
     tail++;
 
@@ -121,12 +123,12 @@ bool CommunicationService::enqueue(
 }
 
 bool CommunicationService::dequeue(
-    ReceivedPacket& packet)
+    CommunicationEvent& event)
 {
     if (count == 0)
         return false;
 
-    packet = queue[head];
+    event = queue[head];
 
     head++;
 
@@ -157,11 +159,11 @@ size_t CommunicationService::pendingPackets() const
 ----------------------------------------------------------*/
 
 void CommunicationService::processIncomingPacket(
-    const ReceivedPacket& packet)
+    const CommunicationEvent& event)
 {
     publishCommunicationEvent(
         EventType::PacketReceived,
-        packet);
+        event);
 }
 
 /*----------------------------------------------------------
@@ -170,22 +172,24 @@ void CommunicationService::processIncomingPacket(
 
 void CommunicationService::publishCommunicationEvent(
     EventType type,
-    const ReceivedPacket& packet)
+    const CommunicationEvent& event)
 {
-    SystemEvent event;
+    SystemEvent sysEvent;
 
-    event.type = type;
+    sysEvent.type = type;
 
-    event.timestamp =
-        (packet.receivedAt != INVALID_TIMESTAMP)
-        ? packet.receivedAt
+    sysEvent.timestamp =
+        (event.packet.receivedAt != INVALID_TIMESTAMP)
+        ? event.packet.receivedAt
         : millis();
 
-    event.source = EventSource::Communication;
+    sysEvent.source = EventSource::Communication;
 
-    event.payload = &packet;
+    // NOTE: payload pointer is valid only synchronously during publish().
+    // If EventBus switches to an asynchronous queue in the future, payload must be deep-copied.
+    sysEvent.payload = &event;
 
-    event.payloadSize = sizeof(ReceivedPacket);
+    sysEvent.payloadSize = sizeof(CommunicationEvent);
 
-    EventBus::publish(event);
+    EventBus::publish(sysEvent);
 }
