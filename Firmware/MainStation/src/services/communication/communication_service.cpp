@@ -18,7 +18,12 @@ void CommunicationService::onDataReceived(const ReceivedPacket& rxPacket)
 
     CommunicationEvent commEvent;
     commEvent.packet = rxPacket;
-    instance->enqueue(commEvent);
+
+    if (!instance->enqueue(commEvent))
+    {
+        instance->overflows++;
+        Logger::warning("Communication queue full! Packet dropped.");
+    }
 }
 
 // Static Instance Initialization
@@ -35,6 +40,7 @@ CommunicationService::CommunicationService(
     head(0),
     tail(0),
     count(0),
+    overflows(0),
     initialized(false)
 {
     // Runtime Guard against multiple service instantiation
@@ -45,6 +51,15 @@ CommunicationService::CommunicationService(
     }
 
     instance = this;
+}
+
+/*----------------------------------------------------------
+    Destructor
+----------------------------------------------------------*/
+
+CommunicationService::~CommunicationService()
+{
+    instance = nullptr;
 }
 
 /*----------------------------------------------------------
@@ -115,6 +130,11 @@ bool CommunicationService::hasConnection() const
     return initialized && (driver.peerCount() > 0);
 }
 
+uint32_t CommunicationService::queueOverflowCount() const
+{
+    return overflows;
+}
+
 /*----------------------------------------------------------
     Queue Management
 ----------------------------------------------------------*/
@@ -124,8 +144,6 @@ bool CommunicationService::enqueue(
 {
     if (count >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
     {
-        Logger::warning("Communication queue full");
-
         return false;
     }
 
