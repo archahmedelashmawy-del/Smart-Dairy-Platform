@@ -14,7 +14,7 @@ ESPNowDriver* ESPNowDriver::instance = nullptr;
 //====================================================
 
 ESPNowDriver::ESPNowDriver()
-    : initialized(false), peers(0)
+    : initialized(false), peers(0), receiveCallback(nullptr), sendCallback(nullptr)
 {
     memset(&statistics, 0, sizeof(statistics));
     instance = this;
@@ -89,7 +89,7 @@ void ESPNowDriver::handleReceive(
             memset(rxContainer.senderMAC, 0, ESP_NOW_ETH_ALEN);
         }
 
-        // Safe RSSI Access Check
+        // Safe RSSI Access Check & Local Receive Timestamp
         rxContainer.rssi = (info->rx_ctrl != nullptr) ? info->rx_ctrl->rssi : 0;
         rxContainer.receivedAt = millis();
 
@@ -114,9 +114,31 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
         return ErrorCode::INVALID_PROTOCOL_VERSION;
     }
 
-    // 2. Validate Packet Type and Payload Length Match
+    // 2. Validate Source Device Type (Blocking 5)
+    switch (packet.header.source)
+    {
+        case DeviceType::MAIN_STATION:
+        case DeviceType::PORTABLE_VET:
+        case DeviceType::DESKTOP_GATEWAY:
+            break;
+
+        default:
+            return ErrorCode::INVALID_DEVICE_TYPE;
+    }
+
+    // 3. Validate Packet Type and Payload Length Match (Blocking 1)
     switch (packet.header.type)
     {
+        case PacketType::HEARTBEAT:
+        case PacketType::ACK:
+        case PacketType::ERROR:
+        case PacketType::DEVICE_STATUS:
+            if (packet.header.payloadLength != 0)
+            {
+                return ErrorCode::INVALID_PAYLOAD_SIZE;
+            }
+            break;
+
         case PacketType::VET_EVENT:
             if (packet.header.payloadLength != sizeof(VetPayload))
             {
@@ -124,15 +146,10 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
             }
             break;
 
+        case PacketType::MILKING_START:
         case PacketType::MILKING_UPDATE:
+        case PacketType::MILKING_FINISH:
             if (packet.header.payloadLength != sizeof(MilkingPayload))
-            {
-                return ErrorCode::INVALID_PAYLOAD_SIZE;
-            }
-            break;
-
-        case PacketType::HEARTBEAT:
-            if (packet.header.payloadLength != 0)
             {
                 return ErrorCode::INVALID_PAYLOAD_SIZE;
             }
@@ -142,7 +159,7 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
             return ErrorCode::INVALID_PACKET_TYPE;
     }
 
-    // 3. Validate Timestamp
+    // 4. Validate Timestamp (Send Time)
     if (packet.header.timestamp == 0)
     {
         return ErrorCode::INVALID_TIMESTAMP;
