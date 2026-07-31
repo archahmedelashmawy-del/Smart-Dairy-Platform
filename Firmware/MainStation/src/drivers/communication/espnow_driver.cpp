@@ -79,8 +79,18 @@ void ESPNowDriver::handleReceive(
     {
         ReceivedPacket rxContainer;
         rxContainer.packet = packet;
-        memcpy(rxContainer.senderMAC, info->src_addr, 6);
-        rxContainer.rssi = info->rx_ctrl->rssi;
+        
+        if (info->src_addr != nullptr)
+        {
+            memcpy(rxContainer.senderMAC, info->src_addr, ESP_NOW_ETH_ALEN);
+        }
+        else
+        {
+            memset(rxContainer.senderMAC, 0, ESP_NOW_ETH_ALEN);
+        }
+
+        // Safe RSSI Access Check
+        rxContainer.rssi = (info->rx_ctrl != nullptr) ? info->rx_ctrl->rssi : 0;
         rxContainer.receivedAt = millis();
 
         receiveCallback(rxContainer);
@@ -98,19 +108,41 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
         return ErrorCode::INVALID_PACKET_SIZE;
     }
 
-    // Validate Header Protocol Version
-    if (packet.header.protocolVersion == 0)
+    // 1. Validate Header Protocol Version
+    if (packet.header.protocolVersion != PROTOCOL_VERSION)
     {
         return ErrorCode::INVALID_PROTOCOL_VERSION;
     }
 
-    // Validate Packet Type range
-    if (packet.header.type == static_cast<PacketType>(0))
+    // 2. Validate Packet Type and Payload Length Match
+    switch (packet.header.type)
     {
-        return ErrorCode::INVALID_PACKET_TYPE;
+        case PacketType::VET_EVENT:
+            if (packet.header.payloadLength != sizeof(VetPayload))
+            {
+                return ErrorCode::INVALID_PAYLOAD_SIZE;
+            }
+            break;
+
+        case PacketType::MILKING_UPDATE:
+            if (packet.header.payloadLength != sizeof(MilkingPayload))
+            {
+                return ErrorCode::INVALID_PAYLOAD_SIZE;
+            }
+            break;
+
+        case PacketType::HEARTBEAT:
+            if (packet.header.payloadLength != 0)
+            {
+                return ErrorCode::INVALID_PAYLOAD_SIZE;
+            }
+            break;
+
+        default:
+            return ErrorCode::INVALID_PACKET_TYPE;
     }
 
-    // Validate Timestamp
+    // 3. Validate Timestamp
     if (packet.header.timestamp == 0)
     {
         return ErrorCode::INVALID_TIMESTAMP;
