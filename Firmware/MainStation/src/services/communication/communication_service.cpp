@@ -1,6 +1,7 @@
 #include "services/communication/communication_service.h"
 
 #include "core/logger.h"
+#include <cassert>
 
 namespace
 {
@@ -8,7 +9,7 @@ namespace
 }
 
 /*----------------------------------------------------------
-    Static Bridge Handler (Blocking 4 Solution)
+    Static Bridge Handler
 ----------------------------------------------------------*/
 
 void CommunicationService::onDataReceived(const ReceivedPacket& rxPacket)
@@ -25,7 +26,7 @@ void CommunicationService::onDataReceived(const ReceivedPacket& rxPacket)
 CommunicationService* CommunicationService::instance = nullptr;
 
 /*----------------------------------------------------------
-    Constructor
+    Constructor (Singleton Guard - Blocking 2)
 ----------------------------------------------------------*/
 
 CommunicationService::CommunicationService(
@@ -37,6 +38,9 @@ CommunicationService::CommunicationService(
     count(0),
     initialized(false)
 {
+    // Guard against multiple service instances (Singleton by design)
+    assert(instance == nullptr && "CommunicationService instance already exists!");
+
     instance = this;
 }
 
@@ -54,7 +58,6 @@ ErrorCode CommunicationService::begin()
     if (err != ErrorCode::OK)
         return err;
 
-    // Register static callback function pointer (Avoids Lambda-capturing issue)
     driver.registerReceiveCallback(CommunicationService::onDataReceived);
 
     initialized = true;
@@ -65,7 +68,7 @@ ErrorCode CommunicationService::begin()
 }
 
 /*----------------------------------------------------------
-    Update
+    Update (Improved Naming - Blocking 3)
 ----------------------------------------------------------*/
 
 void CommunicationService::update()
@@ -73,11 +76,11 @@ void CommunicationService::update()
     if (!initialized)
         return;
 
-    CommunicationEvent event;
+    CommunicationEvent currentEvent;
 
-    while (dequeue(event))
+    while (dequeue(currentEvent))
     {
-        processIncomingPacket(event);
+        processIncomingPacket(currentEvent);
     }
 }
 
@@ -110,7 +113,7 @@ bool CommunicationService::hasConnection() const
 }
 
 /*----------------------------------------------------------
-    Queue Management (Improvement 1 Applied)
+    Queue Management
 ----------------------------------------------------------*/
 
 bool CommunicationService::enqueue(
@@ -168,7 +171,7 @@ void CommunicationService::processIncomingPacket(
 }
 
 /*----------------------------------------------------------
-    Event Publishing (Blocking 3 Applied)
+    Event Publishing
 ----------------------------------------------------------*/
 
 void CommunicationService::publishCommunicationEvent(
@@ -179,7 +182,6 @@ void CommunicationService::publishCommunicationEvent(
 
     sysEvent.type = type;
 
-    // Preserve local receive timestamp
     sysEvent.timestamp =
         (event.packet.receivedAt != INVALID_TIMESTAMP)
         ? event.packet.receivedAt
@@ -187,10 +189,10 @@ void CommunicationService::publishCommunicationEvent(
 
     sysEvent.source = EventSource::Communication;
 
-    // CRITICAL MEMORY SAFETY NOTE (Blocking 3):
-    // payload points to a stack object.
+    // CRITICAL MEMORY SAFETY NOTE:
+    // payload points to a stack object during dispatch.
     // EventBus subscribers MUST consume it immediately synchronously.
-    // Do NOT store this pointer for asynchronous processing.
+    // Do NOT retain this pointer for deferred processing.
     sysEvent.payload = &event;
 
     sysEvent.payloadSize = sizeof(CommunicationEvent);
