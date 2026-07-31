@@ -1,7 +1,6 @@
 #include "services/communication/communication_service.h"
 
 #include "core/logger.h"
-#include <cassert>
 
 namespace
 {
@@ -26,7 +25,7 @@ void CommunicationService::onDataReceived(const ReceivedPacket& rxPacket)
 CommunicationService* CommunicationService::instance = nullptr;
 
 /*----------------------------------------------------------
-    Constructor (Singleton Guard - Blocking 2)
+    Constructor (Runtime Guard - Blocking 1)
 ----------------------------------------------------------*/
 
 CommunicationService::CommunicationService(
@@ -38,8 +37,12 @@ CommunicationService::CommunicationService(
     count(0),
     initialized(false)
 {
-    // Guard against multiple service instances (Singleton by design)
-    assert(instance == nullptr && "CommunicationService instance already exists!");
+    // Runtime Guard against multiple service instantiation
+    if (instance != nullptr)
+    {
+        Logger::error("CommunicationService already instantiated!");
+        abort();
+    }
 
     instance = this;
 }
@@ -68,7 +71,7 @@ ErrorCode CommunicationService::begin()
 }
 
 /*----------------------------------------------------------
-    Update (Improved Naming - Blocking 3)
+    Update
 ----------------------------------------------------------*/
 
 void CommunicationService::update()
