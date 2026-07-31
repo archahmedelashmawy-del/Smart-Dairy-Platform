@@ -23,6 +23,8 @@ public:
 
     [[nodiscard]] ErrorCode begin();
 
+    // Does NOT stop ESP-NOW at hardware level.
+    // Only unregisters callbacks owned by CommunicationService and cleans state.
     void end();
 
     void update();
@@ -65,6 +67,8 @@ private:
 
     ESPNowDriver& driver;
 
+    // Single-Producer (ESP-NOW interrupt/callback)
+    // Single-Consumer (Main Loop update) ring buffer design.
     CommunicationEvent queue[SystemConstants::COMMUNICATION_QUEUE_SIZE];
 
     size_t head;
