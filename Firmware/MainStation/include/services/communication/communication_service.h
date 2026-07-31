@@ -23,6 +23,8 @@ public:
 
     [[nodiscard]] ErrorCode begin();
 
+    void end();
+
     void update();
 
     [[nodiscard]] ErrorCode sendPacket(
@@ -35,6 +37,8 @@ public:
     [[nodiscard]] bool hasConnection() const;
 
     [[nodiscard]] uint32_t queueOverflowCount() const;
+
+    void printDiagnostics(Stream& stream) const;
 
 private:
 
