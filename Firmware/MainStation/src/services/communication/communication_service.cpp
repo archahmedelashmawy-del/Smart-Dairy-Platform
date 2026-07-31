@@ -30,7 +30,7 @@ void CommunicationService::onDataReceived(const ReceivedPacket& rxPacket)
 CommunicationService* CommunicationService::instance = nullptr;
 
 /*----------------------------------------------------------
-    Constructor (Runtime Guard - Blocking 1)
+    Constructor & Destructor
 ----------------------------------------------------------*/
 
 CommunicationService::CommunicationService(
@@ -43,7 +43,6 @@ CommunicationService::CommunicationService(
     overflows(0),
     initialized(false)
 {
-    // Runtime Guard against multiple service instantiation
     if (instance != nullptr)
     {
         Logger::error("CommunicationService already instantiated!");
@@ -53,17 +52,14 @@ CommunicationService::CommunicationService(
     instance = this;
 }
 
-/*----------------------------------------------------------
-    Destructor
-----------------------------------------------------------*/
-
 CommunicationService::~CommunicationService()
 {
+    end();
     instance = nullptr;
 }
 
 /*----------------------------------------------------------
-    Initialization
+    Lifecycle
 ----------------------------------------------------------*/
 
 ErrorCode CommunicationService::begin()
@@ -83,6 +79,20 @@ ErrorCode CommunicationService::begin()
     Logger::info("CommunicationService initialized");
 
     return ErrorCode::OK;
+}
+
+void CommunicationService::end()
+{
+    if (!initialized)
+        return;
+
+    driver.registerReceiveCallback(nullptr);
+    driver.registerSendCallback(nullptr);
+
+    clearQueue();
+    initialized = false;
+
+    Logger::info("CommunicationService stopped and callbacks cleared.");
 }
 
 /*----------------------------------------------------------
@@ -135,6 +145,15 @@ uint32_t CommunicationService::queueOverflowCount() const
     return overflows;
 }
 
+void CommunicationService::printDiagnostics(Stream& stream) const
+{
+    stream.println("--- Communication Service Diagnostics ---");
+    stream.printf("Initialized: %s\n", initialized ? "YES" : "NO");
+    stream.printf("Pending Queue Packets: %zu\n", count);
+    stream.printf("Queue Overflow Count: %u\n", overflows);
+    driver.printStatistics(stream);
+}
+
 /*----------------------------------------------------------
     Queue Management
 ----------------------------------------------------------*/
@@ -180,7 +199,7 @@ size_t CommunicationService::pendingPackets() const
 }
 
 /*----------------------------------------------------------
-    Packet Processing
+    Packet Processing & Publishing
 ----------------------------------------------------------*/
 
 void CommunicationService::processIncomingPacket(
@@ -190,10 +209,6 @@ void CommunicationService::processIncomingPacket(
         EventType::PacketReceived,
         event);
 }
-
-/*----------------------------------------------------------
-    Event Publishing
-----------------------------------------------------------*/
 
 void CommunicationService::publishCommunicationEvent(
     EventType type,
@@ -210,10 +225,6 @@ void CommunicationService::publishCommunicationEvent(
 
     sysEvent.source = EventSource::Communication;
 
-    // CRITICAL MEMORY SAFETY NOTE:
-    // payload points to a stack object during dispatch.
-    // EventBus subscribers MUST consume it immediately synchronously.
-    // Do NOT retain this pointer for deferred processing.
     sysEvent.payload = &event;
 
     sysEvent.payloadSize = sizeof(CommunicationEvent);
