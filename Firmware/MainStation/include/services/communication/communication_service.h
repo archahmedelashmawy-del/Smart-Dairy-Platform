@@ -11,17 +11,7 @@
 #include "config/packet.h"
 
 #include "drivers/communication/espnow_driver.h"
-
-struct ReceivedPacket
-{
-    ESPNowPacket packet;
-
-    uint8_t senderMac[6];
-
-    int8_t rssi;
-
-    uint32_t timestamp;
-};
+#include "models/communication_event.h"
 
 class CommunicationService
 {
@@ -34,11 +24,11 @@ public:
     void update();
 
     [[nodiscard]] ErrorCode sendPacket(
-        const ESPNowPacket& packet,
+        const SmartPacket& packet,
         const uint8_t* peer);
 
     [[nodiscard]] ErrorCode broadcast(
-        const ESPNowPacket& packet);
+        const SmartPacket& packet);
 
     [[nodiscard]] bool hasConnection() const;
 
