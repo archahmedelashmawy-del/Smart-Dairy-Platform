@@ -5,7 +5,7 @@
 #include "core/logger.h"
 
 //====================================================
-// Static Member Initialization (Blocking 2 - Fixed)
+// Static Member Initialization (Blocking 1 - Resolved)
 //====================================================
 
 ESPNowDriver* ESPNowDriver::instance = nullptr;
@@ -13,13 +13,12 @@ ESPNowDriver::ReceiveCallback ESPNowDriver::receiveCallback = nullptr;
 ESPNowDriver::SendCallback ESPNowDriver::sendCallback = nullptr;
 
 //====================================================
-// Constructor (Runtime Guard - Blocking 1)
+// Constructor & Destructor (Blocking 7 - Life Cycle)
 //====================================================
 
 ESPNowDriver::ESPNowDriver()
     : initialized(false), peers(0)
 {
-    // Explicit Guard against multiple instantiation on ESP32
     if (instance != nullptr)
     {
         Logger::error("ESPNowDriver already instantiated! Single instance required.");
@@ -30,8 +29,14 @@ ESPNowDriver::ESPNowDriver()
     instance = this;
 }
 
+ESPNowDriver::~ESPNowDriver()
+{
+    end();
+    instance = nullptr;
+}
+
 //====================================================
-// Internal Receive Callback Bridge
+// Internal Callback Bridges (Receiving & Sending - Blocking 2)
 //====================================================
 
 void ESPNowDriver::onReceiveInternal(
@@ -45,8 +50,16 @@ void ESPNowDriver::onReceiveInternal(
     instance->handleReceive(info, data, len);
 }
 
+void ESPNowDriver::onSendInternal(const uint8_t* mac_addr, esp_now_send_status_t status)
+{
+    if (instance == nullptr)
+        return;
+
+    instance->handleSend(mac_addr, status);
+}
+
 //====================================================
-// Internal Receive Handler
+// Internal Handlers (Blocking 3 - Accurate Tx Stats)
 //====================================================
 
 void ESPNowDriver::handleReceive(
@@ -56,7 +69,6 @@ void ESPNowDriver::handleReceive(
 {
     statistics.packetsReceived++;
 
-    // 1. Basic Validation
     if (data == nullptr || info == nullptr)
     {
         statistics.packetsDropped++;
@@ -70,11 +82,9 @@ void ESPNowDriver::handleReceive(
         return;
     }
 
-    // 2. Copy Packet
     SmartPacket packet;
     memcpy(&packet, data, sizeof(packet));
 
-    // 3. Validate Packet
     ErrorCode result = validatePacket(packet, len);
 
     if (result != ErrorCode::OK)
@@ -84,7 +94,9 @@ void ESPNowDriver::handleReceive(
         return;
     }
 
-    // 4. Forward to Upper Layer via ReceivedPacket Container
+    // Architectural Note (Blocking 4):
+    // Registered receiveCallbacks MUST remain non-blocking (O(1) queue insertion only)
+    // as execution context originates from ESP-IDF WiFi task stack.
     if (receiveCallback != nullptr)
     {
         ReceivedPacket rxContainer;
@@ -99,7 +111,6 @@ void ESPNowDriver::handleReceive(
             memset(rxContainer.senderMAC, 0, ESP_NOW_ETH_ALEN);
         }
 
-        // Safe RSSI Access Check & Local Receive Timestamp
         rxContainer.rssi = (info->rx_ctrl != nullptr) ? info->rx_ctrl->rssi : 0;
         rxContainer.receivedAt = millis();
 
@@ -107,8 +118,27 @@ void ESPNowDriver::handleReceive(
     }
 }
 
+void ESPNowDriver::handleSend(const uint8_t* mac_addr, esp_now_send_status_t status)
+{
+    bool success = (status == ESP_NOW_SEND_SUCCESS);
+
+    if (success)
+    {
+        statistics.packetsSent++;
+    }
+    else
+    {
+        statistics.sendFailures++;
+    }
+
+    if (sendCallback != nullptr)
+    {
+        sendCallback(mac_addr, success);
+    }
+}
+
 //====================================================
-// Packet Validation (Enhanced Bounds Check - Item 3)
+// Packet Validation
 //====================================================
 
 ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
@@ -118,19 +148,16 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
         return ErrorCode::INVALID_PACKET_SIZE;
     }
 
-    // Bounds Check: Prevent unexpected payload lengths (Enhancement 3)
     if (packet.header.payloadLength > sizeof(SmartPacket))
     {
         return ErrorCode::INVALID_PAYLOAD_SIZE;
     }
 
-    // 1. Validate Header Protocol Version
     if (packet.header.protocolVersion != PROTOCOL_VERSION)
     {
         return ErrorCode::INVALID_PROTOCOL_VERSION;
     }
 
-    // 2. Validate Source Device Type
     switch (packet.header.source)
     {
         case DeviceType::MAIN_STATION:
@@ -142,7 +169,6 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
             return ErrorCode::INVALID_DEVICE_TYPE;
     }
 
-    // 3. Validate Packet Identity & Session IDs
     if (packet.header.packetID == 0)
     {
         return ErrorCode::INVALID_PACKET_ID;
@@ -153,7 +179,6 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
         return ErrorCode::INVALID_SESSION_ID;
     }
 
-    // 4. Validate Packet Type and Payload Length Match
     switch (packet.header.type)
     {
         case PacketType::HEARTBEAT:
@@ -186,7 +211,6 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
             return ErrorCode::INVALID_PACKET_TYPE;
     }
 
-    // 5. Validate Timestamp (Send Time)
     if (packet.header.timestamp == 0)
     {
         return ErrorCode::INVALID_TIMESTAMP;
@@ -196,7 +220,7 @@ ErrorCode ESPNowDriver::validatePacket(const SmartPacket& packet, int len)
 }
 
 //====================================================
-// Initialization
+// Initialization & Deinitialization (Blocking 2 & 7)
 //====================================================
 
 ErrorCode ESPNowDriver::begin()
@@ -211,11 +235,25 @@ ErrorCode ESPNowDriver::begin()
         return ErrorCode::ESPNOW_INIT_FAILED;
     }
 
+    // Register Both Callbacks
     esp_now_register_recv_cb(onReceiveInternal);
+    esp_now_register_send_cb(onSendInternal);
 
     initialized = true;
 
     return ErrorCode::OK;
+}
+
+void ESPNowDriver::end()
+{
+    if (!initialized)
+        return;
+
+    esp_now_unregister_recv_cb();
+    esp_now_unregister_send_cb();
+    esp_now_deinit();
+
+    initialized = false;
 }
 
 bool ESPNowDriver::isInitialized() const
@@ -324,8 +362,6 @@ ErrorCode ESPNowDriver::sendPacket(const uint8_t* mac, const SmartPacket& packet
         statistics.sendFailures++;
         return ErrorCode::SEND_FAILED;
     }
-
-    statistics.packetsSent++;
 
     return ErrorCode::OK;
 }
