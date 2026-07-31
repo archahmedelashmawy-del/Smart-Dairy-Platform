@@ -34,26 +34,26 @@ public:
 
 private:
 
-    [[nodiscard]] bool enqueue(const ReceivedPacket& packet);
+    [[nodiscard]] bool enqueue(const CommunicationEvent& event);
 
-    [[nodiscard]] bool dequeue(ReceivedPacket& packet);
+    [[nodiscard]] bool dequeue(CommunicationEvent& event);
 
     void clearQueue();
 
     [[nodiscard]] size_t pendingPackets() const;
 
     void processIncomingPacket(
-        const ReceivedPacket& packet);
+        const CommunicationEvent& event);
 
     void publishCommunicationEvent(
         EventType type,
-        const ReceivedPacket& packet);
+        const CommunicationEvent& event);
 
 private:
 
     ESPNowDriver& driver;
 
-    ReceivedPacket queue[SystemConstants::COMMUNICATION_QUEUE_SIZE];
+    CommunicationEvent queue[SystemConstants::COMMUNICATION_QUEUE_SIZE];
 
     size_t head;
 
