@@ -12,6 +12,11 @@
 ==========================================================
 */
 
-using CommunicationEvent = ReceivedPacket;
+struct CommunicationEvent
+{
+    ReceivedPacket packet;
+
+    // Extensible for future metadata (e.g., status, processingTime, retries)
+};
 
 #endif // COMMUNICATION_EVENT_H
