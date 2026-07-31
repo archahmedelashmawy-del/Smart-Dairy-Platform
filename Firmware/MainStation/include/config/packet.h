@@ -82,3 +82,10 @@ struct SmartPacket
         MilkingPayload milking;
     };
 };
+
+/*
+==========================================================
+ Compile-Time Safety Guard for ESP-NOW Payload Size
+==========================================================
+*/
+static_assert(sizeof(SmartPacket) <= 250, "ESP-NOW packet too large");
