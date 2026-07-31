@@ -8,7 +8,28 @@ namespace
 }
 
 /*----------------------------------------------------------
-    Constructor
+    Static Bridge Handler (Blocking 5 - Handling Drop)
+----------------------------------------------------------*/
+
+void CommunicationService::onDataReceived(const ReceivedPacket& rxPacket)
+{
+    if (instance == nullptr)
+        return;
+
+    CommunicationEvent commEvent;
+    commEvent.packet = rxPacket;
+
+    if (!instance->enqueue(commEvent))
+    {
+        Logger::warning("Communication queue full! Packet dropped silently.");
+    }
+}
+
+// Static Instance Initialization
+CommunicationService* CommunicationService::instance = nullptr;
+
+/*----------------------------------------------------------
+    Constructor & Destructor
 ----------------------------------------------------------*/
 
 CommunicationService::CommunicationService(
@@ -20,6 +41,13 @@ CommunicationService::CommunicationService(
     count(0),
     initialized(false)
 {
+    if (instance != nullptr)
+    {
+        Logger::error("CommunicationService already instantiated!");
+        abort();
+    }
+
+    instance = this;
 }
 
 /*----------------------------------------------------------
@@ -36,11 +64,7 @@ ErrorCode CommunicationService::begin()
     if (err != ErrorCode::OK)
         return err;
 
-    driver.setReceiveCallback(
-        [this](const ReceivedPacket& packet)
-        {
-            enqueue(packet);
-        });
+    driver.registerReceiveCallback(CommunicationService::onDataReceived);
 
     initialized = true;
 
@@ -58,53 +82,69 @@ void CommunicationService::update()
     if (!initialized)
         return;
 
-    ReceivedPacket packet;
+    CommunicationEvent currentEvent;
 
-    while (dequeue(packet))
+    while (dequeue(currentEvent))
     {
-        processIncomingPacket(packet);
+        processIncomingPacket(currentEvent);
     }
 }
 
 /*----------------------------------------------------------
-    Queue
+    Send & Broadcast API
+----------------------------------------------------------*/
+
+ErrorCode CommunicationService::sendPacket(
+    const SmartPacket& packet,
+    const uint8_t* peer)
+{
+    if (!initialized)
+        return ErrorCode::ESPNOW_NOT_INITIALIZED;
+
+    return driver.sendPacket(peer, packet);
+}
+
+ErrorCode CommunicationService::broadcast(
+    const SmartPacket& packet)
+{
+    if (!initialized)
+        return ErrorCode::ESPNOW_NOT_INITIALIZED;
+
+    return driver.broadcast(packet);
+}
+
+bool CommunicationService::hasConnection() const
+{
+    return initialized && (driver.peerCount() > 0);
+}
+
+/*----------------------------------------------------------
+    Queue Management
 ----------------------------------------------------------*/
 
 bool CommunicationService::enqueue(
-    const ReceivedPacket& packet)
+    const CommunicationEvent& event)
 {
     if (count >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
     {
-        Logger::warning("Communication queue full");
-
         return false;
     }
 
-    queue[tail] = packet;
-
-    tail++;
-
-    if (tail >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
-        tail = 0;
-
+    queue[tail] = event;
+    tail = (tail + 1) % SystemConstants::COMMUNICATION_QUEUE_SIZE;
     count++;
 
     return true;
 }
 
 bool CommunicationService::dequeue(
-    ReceivedPacket& packet)
+    CommunicationEvent& event)
 {
     if (count == 0)
         return false;
 
-    packet = queue[head];
-
-    head++;
-
-    if (head >= SystemConstants::COMMUNICATION_QUEUE_SIZE)
-        head = 0;
-
+    event = queue[head];
+    head = (head + 1) % SystemConstants::COMMUNICATION_QUEUE_SIZE;
     count--;
 
     return true;
@@ -113,9 +153,7 @@ bool CommunicationService::dequeue(
 void CommunicationService::clearQueue()
 {
     head = 0;
-
     tail = 0;
-
     count = 0;
 }
 
@@ -129,35 +167,37 @@ size_t CommunicationService::pendingPackets() const
 ----------------------------------------------------------*/
 
 void CommunicationService::processIncomingPacket(
-    const ReceivedPacket& packet)
+    const CommunicationEvent& event)
 {
     publishCommunicationEvent(
         EventType::PacketReceived,
-        packet);
+        event);
 }
 
 /*----------------------------------------------------------
-    Event Publishing
+    Event Publishing (Blocking 6 Contract Explicitly Noted)
 ----------------------------------------------------------*/
 
 void CommunicationService::publishCommunicationEvent(
     EventType type,
-    const ReceivedPacket& packet)
+    const CommunicationEvent& event)
 {
-    SystemEvent event;
+    SystemEvent sysEvent;
 
-    event.type = type;
+    sysEvent.type = type;
 
-    event.timestamp =
-        (packet.timestamp != INVALID_TIMESTAMP)
-        ? packet.timestamp
+    sysEvent.timestamp =
+        (event.packet.receivedAt != INVALID_TIMESTAMP)
+        ? event.packet.receivedAt
         : millis();
 
-    event.source = EventSource::Communication;
+    sysEvent.source = EventSource::Communication;
 
-    event.payload = &packet;
+    // ARCHITECTURAL CONTRACT (Blocking 6):
+    // EventBus implementation MUST remain fully synchronous when dispatching system events.
+    // 'payload' references a frame-allocated object for maximum zero-copy performance.
+    sysEvent.payload = &event;
+    sysEvent.payloadSize = sizeof(CommunicationEvent);
 
-    event.payloadSize = sizeof(ReceivedPacket);
-
-    EventBus::publish(event);
+    EventBus::publish(sysEvent);
 }
