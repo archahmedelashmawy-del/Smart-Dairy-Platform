@@ -4,23 +4,19 @@
 #include "drivers/communication/espnow_driver.h"
 #include "services/communication/communication_service.h"
 
-// إنشاء الكائنات الأساسية للنظام (System Singletons/Instances)
+// System Instances
 ESPNowDriver espDriver;
 CommunicationService commService(espDriver);
 
 void setup()
 {
-    // تهيئة الاتصال التسلسلي (Serial) للـ Diagnostics
     Serial.begin(115200);
     while (!Serial && millis() < 3000);
 
-    Logger::info("==========================================");
-    Logger::info("   Smart Dairy Platform Firmware v1.0     ");
-    Logger::info("==========================================");
+    Logger::info("Initializing Smart Dairy Firmware System...");
 
-    // تهيئة خدمة الاتصالات
-    ErrorCode initStatus = commService.begin();
-    if (initStatus == ErrorCode::OK)
+    // Initialize Communication Service
+    if (commService.begin() == ErrorCode::OK)
     {
         Logger::info("Communication Service initialized successfully.");
     }
@@ -32,17 +28,16 @@ void setup()
 
 void loop()
 {
-    // معالجة طابور الحزم المتبقية والاستجابة للأحداث الشبكية
+    // Update Communication Loop Queue processing
     commService.update();
 
-    // طباعة التشخيص والإحصائيات كل 10 ثوانٍ
-    static uint32_t lastDiagnosticsTime = 0;
-    if (millis() - lastDiagnosticsTime >= 10000)
+    // Periodic Diagnostics output every 10 seconds
+    static uint32_t lastDiagnostics = 0;
+    if (millis() - lastDiagnostics >= 10000)
     {
         commService.printDiagnostics(Serial);
-        lastDiagnosticsTime = millis();
+        lastDiagnostics = millis();
     }
 
-    // تأخير بسيط لمنع استهلاك الـ CPU بدون داعٍ
     delay(10);
 }
