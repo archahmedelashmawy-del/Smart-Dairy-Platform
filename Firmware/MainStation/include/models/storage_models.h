@@ -2,7 +2,22 @@
 #define STORAGE_MODELS_H
 
 #include <Arduino.h>
-#include "config/packet.h"
+#include "core/types/system_types.h"
+
+/*
+==========================================================
+ Veterinary Event Types
+==========================================================
+*/
+enum class VetEventType : uint16_t
+{
+    Unknown = 0,
+    Vaccination,
+    Examination,
+    Treatment,
+    Insemination,
+    PregnancyCheck
+};
 
 /*
 ==========================================================
@@ -11,15 +26,13 @@
 */
 struct MilkingRecord
 {
-    uint32_t recordId;
-    uint16_t cowId;
+    uint32_t cowID;
     uint32_t startTime;
     uint32_t endTime;
-    float milkWeightKg;
-    float milkTemperature;
+    float milkWeight;
+    float milkVolume;
+    float temperature;
     uint32_t durationSeconds;
-    uint8_t deviceId;
-    bool isSynced;
 };
 
 /*
@@ -29,45 +42,41 @@ struct MilkingRecord
 */
 struct VetRecord
 {
-    uint32_t recordId;
-    uint16_t cowId;
-    uint8_t eventType;      // e.g., Vaccination, Examination, Treatment
-    uint8_t operatorId;
+    uint32_t cowID;
+    VetEventType eventType;
+    uint32_t operatorID;
     uint32_t timestamp;
-    char notes[64];
-    bool isSynced;
 };
 
 /*
 ==========================================================
- System Settings / Configuration Model
+ System Settings Model
 ==========================================================
 */
 struct SystemSettings
 {
-    uint8_t deviceId;
+    uint16_t deviceID;
+    char deviceName[32];
     DeviceType deviceType;
-    uint8_t protocolVersion;
-    float calibrationOffset;
     float calibrationFactor;
-    char wifiSSID[32];
-    char wifiPassword[64];
     uint32_t heartbeatIntervalMs;
+    uint8_t protocolVersion;
 };
 
 /*
 ==========================================================
- Storage Diagnostics & Telemetry Statistics
+ Storage Telemetry & Statistics Model
 ==========================================================
 */
 struct StorageStatistics
 {
-    uint32_t readOperations;
-    uint32_t writeOperations;
-    uint32_t failedOperations;
-    uint32_t fileCount;
-    uint32_t formatCount;
-    uint32_t lastErrorTime;
+    uint32_t totalWrites;
+    uint32_t totalReads;
+    uint32_t writeFailures;
+    uint32_t readFailures;
+    uint32_t corruptionsDetected;
+    uint64_t bytesWritten;
+    uint64_t bytesRead;
 };
 
-#endif
+#endif // STORAGE_MODELS_H
