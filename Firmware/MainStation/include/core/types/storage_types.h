@@ -26,8 +26,8 @@ enum class StorageBackend : uint8_t
 enum class FileMode : uint8_t
 {
     Read = 0,
-    Write,      // Overwrites existing
-    Append,     // Appends to end
+    Write,      // Overwrites existing file
+    Append,     // Appends to end of file
     ReadWrite   // Read and write access
 };
 
@@ -45,6 +45,7 @@ struct StorageInfo
     uint64_t usedBytes;
     uint64_t freeBytes;
     uint32_t fileCount;
+    uint32_t clusterSize; // Added for SD/Filesystem Cluster & Block Size context
 };
 
-#endif
+#endif // STORAGE_TYPES_H
